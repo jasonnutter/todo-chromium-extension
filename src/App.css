@@ -1,0 +1,17 @@
+body {
+    padding: 15px;
+}
+
+.wrapper {
+    width: 400px;
+}
+
+ul {
+    padding: 0;
+    margin: 0;
+    list-style-type: none;
+}
+
+li {
+    margin-bottom: 15px;
+}

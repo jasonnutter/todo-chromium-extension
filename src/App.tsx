@@ -292,7 +292,7 @@ const App: React.FC = () => {
         <div className="wrapper">
             {account ? (
                 <Pivot>
-                    <PivotItem headerText="Save Link" style={{ paddingTop: '15px'}}>
+                    <PivotItem headerText="Save Link">
                         <Stack tokens={{ childrenGap: 15 }}>
                             <form
                                 onSubmit={async (e) => {
@@ -350,30 +350,28 @@ const App: React.FC = () => {
                                 </ul>
                             </form>
 
-                            <Stack tokens={{ childrenGap: 15 }}>
-                                {(inProgress || success) && (
-                                    <Stack tokens={{ childrenGap: 15 }}>
-                                        {inProgress && (
-                                            <Spinner size={SpinnerSize.medium} />
-                                        )}
-                                        {success && (
-                                            <MessageBar
-                                                messageBarType={MessageBarType.success}
-                                            >
-                                                Link saved successfully.
-                                            </MessageBar>
-                                        )}
-                                        {latestTask && (
-                                            <DefaultButton
-                                                href={`https://to-do.microsoft.com/tasks/id/${latestTask}/details`}
-                                                target="_blank"
-                                            >
-                                                View Task
-                                            </DefaultButton>
-                                        )}
-                                    </Stack>
-                                )}
-                            </Stack>
+                            {(inProgress || success) && (
+                                <Stack tokens={{ childrenGap: 15 }}>
+                                    {inProgress && (
+                                        <Spinner size={SpinnerSize.medium} />
+                                    )}
+                                    {success && (
+                                        <MessageBar
+                                            messageBarType={MessageBarType.success}
+                                        >
+                                            Link saved successfully.
+                                        </MessageBar>
+                                    )}
+                                    {latestTask && (
+                                        <DefaultButton
+                                            href={`https://to-do.microsoft.com/tasks/id/${latestTask}/details`}
+                                            target="_blank"
+                                        >
+                                            View Task
+                                        </DefaultButton>
+                                    )}
+                                </Stack>
+                            )}
                         </Stack>
                     </PivotItem>
                     <PivotItem headerText="Account" style={{ paddingTop: '15px'}}>

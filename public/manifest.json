@@ -1,8 +1,8 @@
 {
     "$schema": "http://json.schemastore.org/chrome-manifest",
-    "name": "To Do - Link Saver",
+    "name": "To-Do (Unofficial)",
     "version": "1.0",
-    "description": "Chromium extension for saving links to your Microsoft To Do list.",
+    "description": "Unofficial Chrome/Edge extension for saving links to your Microsoft To Do list.",
     "manifest_version": 2,
     "permissions": [
         "activeTab",
@@ -18,5 +18,11 @@
         "index.html",
         "redirect.html"
     ],
+    "icons": {
+        "16": "icon.png",
+        "128": "icon.png",
+        "256": "icon.png",
+        "48": "icon.png"
+    },
     "incognito": "split"
   }

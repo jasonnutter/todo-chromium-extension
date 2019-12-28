@@ -18,6 +18,7 @@ initializeIcons();
 
 const msal = new Msal.UserAgentApplication({
     auth: {
+        authority: "https://login.microsoftonline.com/common/",
         clientId: "36cb3b59-915a-424e-bc06-f8f557baa72f",
         redirectUri: `${window.location.origin}/redirect.html`
     },
@@ -28,6 +29,7 @@ const msal = new Msal.UserAgentApplication({
 
 const TASKS_SCOPES = [
     "Tasks.ReadWrite",
+    "User.Read",
     "openid",
     "profile"
 ];

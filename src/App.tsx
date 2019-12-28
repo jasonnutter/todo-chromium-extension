@@ -95,6 +95,13 @@ async function getAccessToken(scopes: string[]): Promise<string> {
     }
 }
 
+async function getCachedAccessToken(scopes: string[]): Promise<string | null> {
+    // acquireTokenSilent will throw an error in Chrome extensions if a network request is made.
+    const response = await msal.acquireTokenSilent({ scopes }).catch(() => null);
+
+    return response && response.accessToken;
+}
+
 async function getSignedInUser(): Promise<ChromeUser> {
     return new Promise((resolve, reject) => {
         if (chrome && chrome.identity) {
@@ -240,6 +247,18 @@ function useCurrentTab(defaultTab: ChromeTab): [ ChromeTab, React.Dispatch<React
     return [ currentTab, setCurrentTab ];
 }
 
+function useCachedAccessToken(defaultCachedAccessToken: string | null): [ string | null, React.Dispatch<React.SetStateAction<string | null>>] {
+    const [ cachedAccessToken, setCachedAccessToken ] = useState<string | null>(defaultCachedAccessToken);
+
+    useEffect(() => {
+        getCachedAccessToken(TASKS_SCOPES)
+            .then(accessToken => setCachedAccessToken(accessToken))
+            .catch(() => setCachedAccessToken(defaultCachedAccessToken));
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return [ cachedAccessToken, setCachedAccessToken ];
+}
+
 function useGraphProfile(defaultProfile: GraphProfile): [ GraphProfile, React.Dispatch<React.SetStateAction<GraphProfile>> ] {
     const [ graphProfile, setGraphProfile ] = useState<GraphProfile>(defaultProfile);
 
@@ -280,6 +299,8 @@ const App: React.FC = () => {
     const [ inProgress, setInProgress ] = useState<boolean>(false);
     const [ latestTask, setLatestTask ] = useState<string | undefined>('');
 
+    const [ cachedAccessToken, setCachedAccessToken ] = useCachedAccessToken(null);
+
     const [ currentTab, setCurrentTab ] = useCurrentTab({
         title: '',
         url: ''
@@ -312,6 +333,18 @@ const App: React.FC = () => {
                                 }}
                             >
                                 <ul>
+                                    {!cachedAccessToken && (
+                                        <li>
+                                            <PrimaryButton
+                                                onClick={async () => {
+                                                    const accessToken = await getAccessToken(TASKS_SCOPES);
+                                                    setCachedAccessToken(accessToken);
+                                                }}
+                                            >
+                                                Get Access Token
+                                            </PrimaryButton>
+                                        </li>
+                                    )}
                                     <li>
                                         <TextField
                                             label="Title"
@@ -343,7 +376,7 @@ const App: React.FC = () => {
                                     </li>
                                     <li>
                                         <PrimaryButton
-                                            disabled={inProgress}
+                                            disabled={inProgress || !cachedAccessToken}
                                             type="submit"
                                         >
                                             Save Link

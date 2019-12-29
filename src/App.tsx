@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import * as Msal from 'msal';
 import {
@@ -9,7 +9,7 @@ import {
     CompoundButton,
     Persona, PersonaSize,
     Pivot, PivotItem,
-    TextField
+    TextField, ComboBox, IComboBoxOption, IComboBox, Label
 } from 'office-ui-fabric-react';
 
 import { initializeIcons } from 'office-ui-fabric-react/lib/Icons';
@@ -34,7 +34,9 @@ const TASKS_SCOPES = [
     "profile"
 ];
 
-const TASKS_FOLDER_NAME = "Links";
+const DEFAULT_TASKS_FOLDER_NAME = "Links";
+const TASK_FOLDER_SYNC_KEY = "taskFolder";
+const NEW_FOLDER_SUFFIX = " (New)";
 
 declare const chrome: {
     tabs: {
@@ -42,6 +44,12 @@ declare const chrome: {
     },
     identity: {
         getProfileUserInfo: (callback: (user: ChromeUser) => void) => void
+    },
+    storage: {
+        sync: {
+            get: <T>(key: string, callback: (result: { [key: string]: T }) => void) => void,
+            set: (items: object, callback: () => void) => void
+        }
     }
 }
 
@@ -191,14 +199,54 @@ async function getCurrentTab(): Promise<ChromeTab> {
     });
 }
 
+async function readSyncedValue<T>(key: string, defaultValue: T): Promise<T> {
+    return new Promise((resolve, reject) => {
+        if (chrome && chrome.storage) {
+            chrome.storage.sync.get<T>(key, (result) => {
+                resolve(result[key]);
+            });
+        } else {
+            try {
+                const value = localStorage.getItem(key);
+                const result = value ? JSON.parse(value) as T : defaultValue;
+
+                resolve(result);
+            } catch (e) {
+                reject(e);
+            }
+        }
+    });
+}
+
+async function saveSyncedValue<T>(key: string, value: T): Promise<T> {
+    return new Promise((resolve, reject) => {
+        if (chrome && chrome.storage) {
+            chrome.storage.sync.set({ [key]: value }, () => {
+                resolve(value);
+            })
+        } else {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+                resolve(value);
+            } catch (e) {
+                reject(e);
+            }
+        }
+    });
+}
+
 async function getGraphProfile(): Promise<GraphProfile> {
     const profile = await getGraphJson<GraphProfile>("https://graph.microsoft.com/beta/me", TASKS_SCOPES);
 
     return profile;
 }
 
+async function getTaskFolders(name: string): Promise<OutlookTaskFolders> {
+    return getGraphJson<OutlookTaskFolders>(`https://graph.microsoft.com/beta/me/outlook/taskFolders?$filter=startswith(name, '${name}')`, TASKS_SCOPES);
+}
+
 async function getOrCreateTaskFolder(name: string): Promise<OutlookTaskFolder> {
-    const existingFolders = await getGraphJson<OutlookTaskFolders>(`https://graph.microsoft.com/beta/me/outlook/taskFolders?$filter=startswith(name, '${name}')`, TASKS_SCOPES);
+    const existingFolders = await getTaskFolders(name);
 
     if (existingFolders.value.length > 0) {
         return existingFolders.value[0];
@@ -209,8 +257,8 @@ async function getOrCreateTaskFolder(name: string): Promise<OutlookTaskFolder> {
     return newFolder;
 }
 
-async function addTask(title: string, url: string): Promise<OutlookTask> {
-    const { id: folderId } = await getOrCreateTaskFolder(TASKS_FOLDER_NAME);
+async function addTask(title: string, url: string, folderName: string): Promise<OutlookTask> {
+    const { id: folderId } = await getOrCreateTaskFolder(folderName);
 
     const newTask = await postGraphJson<OutlookTask>(`https://graph.microsoft.com/beta/me/outlook/taskFolders/${folderId}/tasks`, TASKS_SCOPES, {
         subject: title,
@@ -245,6 +293,32 @@ function useCurrentTab(defaultTab: ChromeTab): [ ChromeTab, React.Dispatch<React
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     return [ currentTab, setCurrentTab ];
+}
+
+function useSyncedValue<T>(key: string, defaultValue: T, callback?: (result: T) => void): [T | null, (value: T) => Promise<T> ] {
+    const [ syncedValue, setSyncedValue ] = useState<T | null>(defaultValue);
+
+    useEffect(() => {
+        readSyncedValue(key, defaultValue)
+            .then((result: T) => {
+                if (result) {
+                    setSyncedValue(result as T);
+                }
+
+                if (callback) {
+                    callback(result as T);
+                }
+            })
+            .catch(() => setSyncedValue(null));
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const saveAndSetSyncedValue = (value: T): Promise<T> => {
+        setSyncedValue(value);
+
+        return saveSyncedValue(key, value);
+    };
+
+    return [ syncedValue, saveAndSetSyncedValue ];
 }
 
 function useCachedAccessToken(defaultCachedAccessToken: string | null): [ string | null, React.Dispatch<React.SetStateAction<string | null>>] {
@@ -298,6 +372,28 @@ const App: React.FC = () => {
     const [ success, setSuccess ] = useState<boolean>(false);
     const [ inProgress, setInProgress ] = useState<boolean>(false);
     const [ latestTask, setLatestTask ] = useState<string | undefined>('');
+    const [ selectedTaskFolderIndex, setSelectedTaskFolderIndex] = useState<number>(0);
+
+    // Selected folder (in progress)
+    const [ selectedTaskFolder, setSelectedTaskFolder ] = useState<IComboBoxOption | null>(null);
+
+    // Folder name (saved)
+    const [ savedTaskFolder, setSavedTaskFolder ] = useState<string>(DEFAULT_TASKS_FOLDER_NAME);
+
+    // Folders fetched from API
+    const [ taskFolders, setTaskFolders ] = useState<IComboBoxOption[]>([
+        { key: DEFAULT_TASKS_FOLDER_NAME, text: DEFAULT_TASKS_FOLDER_NAME }
+    ]);
+
+    // Load synced folder name
+    const [ ,setSyncedFolderName ] = useSyncedValue<string>(TASK_FOLDER_SYNC_KEY, DEFAULT_TASKS_FOLDER_NAME, (folderName => {
+        setTaskFolders([
+            { key: folderName, text: folderName}
+        ]);
+        setSavedTaskFolder(folderName);
+    }));
+
+    const comboBoxRef = useRef<IComboBox | null>(null);
 
     const [ cachedAccessToken, setCachedAccessToken ] = useCachedAccessToken(null);
 
@@ -325,7 +421,7 @@ const App: React.FC = () => {
                                     setInProgress(true);
                                     setLatestTask('');
 
-                                    const { id } = await addTask(currentTab.title, currentTab.url);
+                                    const { id } = await addTask(currentTab.title, currentTab.url, savedTaskFolder);
 
                                     setLatestTask(id);
                                     setInProgress(false);
@@ -409,8 +505,96 @@ const App: React.FC = () => {
                             )}
                         </Stack>
                     </PivotItem>
-                    <PivotItem headerText="Account" style={{ paddingTop: '15px'}}>
+                    <PivotItem headerText="Settings">
                         <Stack tokens={{ childrenGap: 15 }}>
+                            <form
+                                onSubmit={async e => {
+                                    e.preventDefault();
+
+                                    if (selectedTaskFolder && selectedTaskFolder.text) {
+                                        const newFolderName = selectedTaskFolder.text.split(NEW_FOLDER_SUFFIX)[0].trim();
+
+                                        setSavedTaskFolder(newFolderName);
+                                        setSyncedFolderName(newFolderName)
+                                            .then(result => {
+                                                console.log('saved done', result);
+                                            })
+                                            .catch(() => {})
+                                    }
+                                }}
+                            >
+                                <ul>
+                                    <li>
+                                        <ComboBox
+                                            allowFreeform={true}
+                                            selectedKey={selectedTaskFolder ? selectedTaskFolder.key : taskFolders[0].key}
+                                            label="Task Folder"
+                                            onPendingValueChanged={async (option, index, value) => {
+                                                if (value) {
+                                                    const folders = await getTaskFolders(value);
+                                                    const folderExists = folders.value.find(folder => folder.name === value);
+                                                    const newFolders: IComboBoxOption[] = folderExists ? [] : [ { key: value, text: `${value}${NEW_FOLDER_SUFFIX}` }]
+
+                                                    if (comboBoxRef.current) {
+                                                        comboBoxRef.current.focus(true);
+                                                    }
+
+                                                    if (folders.value.length) {
+                                                        setTaskFolders(newFolders.concat(folders.value.map(folder => ({
+                                                            key: folder.id,
+                                                            text: folder.name
+                                                        }))));
+                                                    } else {
+                                                        setTaskFolders(newFolders);
+                                                    }
+                                                } else {
+                                                    setSelectedTaskFolder(null);
+                                                }
+                                            }}
+                                            onItemClick={(e, option, index) => {
+                                                if (option && option.text) {
+                                                    setSelectedTaskFolder(option);
+                                                    setSelectedTaskFolderIndex(index || 0);
+                                                }
+                                            }}
+                                            onChange={(e, option, index) => {
+                                                const target = e.target as HTMLInputElement;
+
+                                                if (option && option.text) {
+                                                    setSelectedTaskFolder(option);
+                                                    setSelectedTaskFolderIndex(index || 0);
+                                                } else {
+                                                    const folderIndex = taskFolders.findIndex(folder => folder.text.split(NEW_FOLDER_SUFFIX)[0] === target.value);
+                                                    setSelectedTaskFolder(taskFolders[folderIndex]);
+                                                    setSelectedTaskFolderIndex(folderIndex);
+                                                }
+                                            }}
+                                            onBlur={(e => {
+                                                if (taskFolders.length) {
+                                                    setSelectedTaskFolder(taskFolders[selectedTaskFolderIndex])
+                                                }
+                                            })}
+                                            onScrollToItem={(index) => {
+                                                setSelectedTaskFolderIndex(index > -1 ? index : 0);
+                                            }}
+                                            componentRef={comboBoxRef}
+                                            options={taskFolders}
+                                        />
+                                    </li>
+
+                                    <li>
+                                        <PrimaryButton
+                                            disabled={!selectedTaskFolder}
+                                            type="submit"
+                                        >
+                                            Save Task Folder
+                                        </PrimaryButton>
+                                    </li>
+                                </ul>
+                            </form>
+
+                            <Label>Account</Label>
+
                             {account && (
                                 <GraphProfile />
                             )}

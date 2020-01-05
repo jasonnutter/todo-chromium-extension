@@ -203,7 +203,7 @@ async function readSyncedValue<T>(key: string, defaultValue: T): Promise<T> {
     return new Promise((resolve, reject) => {
         if (chrome && chrome.storage) {
             chrome.storage.sync.get<T>(key, (result) => {
-                resolve(result[key]);
+                resolve(result[key] || defaultValue);
             });
         } else {
             try {

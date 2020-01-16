@@ -241,8 +241,14 @@ async function getGraphProfile(): Promise<GraphProfile> {
     return profile;
 }
 
-async function getTaskFolders(name: string): Promise<OutlookTaskFolders> {
-    return getGraphJson<OutlookTaskFolders>(`https://graph.microsoft.com/beta/me/outlook/taskFolders?$filter=startswith(name, '${name}')`, TASKS_SCOPES);
+async function getTaskFolders(name?: string): Promise<OutlookTaskFolders> {
+    const url = name ? `https://graph.microsoft.com/beta/me/outlook/taskFolders?$filter=startswith(name, '${name}')` : `https://graph.microsoft.com/beta/me/outlook/taskFolders`;
+
+    return getGraphJson<OutlookTaskFolders>(url, TASKS_SCOPES);
+}
+
+async function createTaskFolder(name: string): Promise<OutlookTaskFolder> {
+    return postGraphJson<OutlookTaskFolder>('https://graph.microsoft.com/beta/me/outlook/taskFolders', TASKS_SCOPES, { name });
 }
 
 async function getOrCreateTaskFolder(name: string): Promise<OutlookTaskFolder> {
@@ -252,9 +258,7 @@ async function getOrCreateTaskFolder(name: string): Promise<OutlookTaskFolder> {
         return existingFolders.value[0];
     }
 
-    const newFolder = await postGraphJson<OutlookTaskFolder>('https://graph.microsoft.com/beta/me/outlook/taskFolders', TASKS_SCOPES, { name });
-
-    return newFolder;
+    return createTaskFolder(name);
 }
 
 async function addTask(title: string, url: string, folderName: string): Promise<OutlookTask> {
@@ -378,7 +382,7 @@ const App: React.FC = () => {
     const [ selectedTaskFolder, setSelectedTaskFolder ] = useState<IComboBoxOption | null>(null);
 
     // Folder name (saved)
-    const [ savedTaskFolder, setSavedTaskFolder ] = useState<string>(DEFAULT_TASKS_FOLDER_NAME);
+    const [ , setSavedTaskFolder ] = useState<string>(DEFAULT_TASKS_FOLDER_NAME);
 
     // Folders fetched from API
     const [ taskFolders, setTaskFolders ] = useState<IComboBoxOption[]>([
@@ -421,11 +425,18 @@ const App: React.FC = () => {
                                     setInProgress(true);
                                     setLatestTask('');
 
-                                    const { id } = await addTask(currentTab.title, currentTab.url, savedTaskFolder);
+                                    if (selectedTaskFolder && selectedTaskFolder.text) {
+                                        const newFolderName = selectedTaskFolder.text.split(NEW_FOLDER_SUFFIX)[0].trim();
 
-                                    setLatestTask(id);
+                                        setSavedTaskFolder(newFolderName);
+                                        setSyncedFolderName(newFolderName);
+
+                                        const { id } = await addTask(currentTab.title, currentTab.url, newFolderName);
+                                        setLatestTask(id);
+                                        setSuccess(true);
+                                    }
+
                                     setInProgress(false);
-                                    setSuccess(true);
                                 }}
                             >
                                 <ul>
@@ -470,60 +481,6 @@ const App: React.FC = () => {
                                             }}
                                         />
                                     </li>
-                                    <li>
-                                        <PrimaryButton
-                                            disabled={inProgress || !cachedAccessToken}
-                                            type="submit"
-                                        >
-                                            Save Link
-                                        </PrimaryButton>
-                                    </li>
-                                </ul>
-                            </form>
-
-                            {(inProgress || success) && (
-                                <Stack tokens={{ childrenGap: 15 }}>
-                                    {inProgress && (
-                                        <Spinner size={SpinnerSize.medium} />
-                                    )}
-                                    {success && (
-                                        <MessageBar
-                                            messageBarType={MessageBarType.success}
-                                        >
-                                            Link saved successfully.
-                                        </MessageBar>
-                                    )}
-                                    {latestTask && (
-                                        <DefaultButton
-                                            href={`https://to-do.microsoft.com/tasks/id/${latestTask}/details`}
-                                            target="_blank"
-                                        >
-                                            View Task
-                                        </DefaultButton>
-                                    )}
-                                </Stack>
-                            )}
-                        </Stack>
-                    </PivotItem>
-                    <PivotItem headerText="Settings">
-                        <Stack tokens={{ childrenGap: 15 }}>
-                            <form
-                                onSubmit={async e => {
-                                    e.preventDefault();
-
-                                    if (selectedTaskFolder && selectedTaskFolder.text) {
-                                        const newFolderName = selectedTaskFolder.text.split(NEW_FOLDER_SUFFIX)[0].trim();
-
-                                        setSavedTaskFolder(newFolderName);
-                                        setSyncedFolderName(newFolderName)
-                                            .then(result => {
-                                                console.log('saved done', result);
-                                            })
-                                            .catch(() => {})
-                                    }
-                                }}
-                            >
-                                <ul>
                                     <li>
                                         <ComboBox
                                             allowFreeform={true}
@@ -581,18 +538,47 @@ const App: React.FC = () => {
                                             options={taskFolders}
                                         />
                                     </li>
-
                                     <li>
                                         <PrimaryButton
-                                            disabled={!selectedTaskFolder}
+                                            disabled={(
+                                                inProgress ||
+                                                !cachedAccessToken ||
+                                                !currentTab.title
+                                            )}
                                             type="submit"
                                         >
-                                            Save Task Folder
+                                            Save Link
                                         </PrimaryButton>
                                     </li>
                                 </ul>
                             </form>
 
+                            {(inProgress || success) && (
+                                <Stack tokens={{ childrenGap: 15 }}>
+                                    {inProgress && (
+                                        <Spinner size={SpinnerSize.medium} />
+                                    )}
+                                    {success && (
+                                        <MessageBar
+                                            messageBarType={MessageBarType.success}
+                                        >
+                                            Link saved successfully.
+                                        </MessageBar>
+                                    )}
+                                    {latestTask && (
+                                        <DefaultButton
+                                            href={`https://to-do.microsoft.com/tasks/id/${latestTask}/details`}
+                                            target="_blank"
+                                        >
+                                            View Task
+                                        </DefaultButton>
+                                    )}
+                                </Stack>
+                            )}
+                        </Stack>
+                    </PivotItem>
+                    <PivotItem headerText="Account">
+                        <Stack tokens={{ childrenGap: 15 }}>
                             <Label>Account</Label>
 
                             {account && (

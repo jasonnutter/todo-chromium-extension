@@ -49,6 +49,7 @@ const Account: React.FC = () => {
 const App: React.FC = () => {
     const [ account, setAccount ] = useState<AccountInfo | null>(getActiveAccount());
     const [ success, setSuccess ] = useState<boolean>(false);
+    const [ error, setError ] = useState<string>("");
     const [ inProgress, setInProgress ] = useState<boolean>(false);
     const [ latestTask, setLatestTask ] = useState<string | undefined>('');
     const [ selectedTaskFolderIndex, setSelectedTaskFolderIndex] = useState<number>(0);
@@ -110,9 +111,15 @@ const App: React.FC = () => {
                                         setSavedTaskFolder(newFolderName);
                                         setSyncedFolderName(newFolderName);
 
-                                        const { id } = await addTask(currentTab.title || "", currentTab.url || "", newFolderName);
-                                        setLatestTask(id);
-                                        setSuccess(true);
+                                        try {
+                                            const { id } = await addTask(currentTab.title || "", currentTab.url || "", newFolderName);
+                                            setLatestTask(id);
+                                            setSuccess(true);
+                                            setError("");
+                                        } catch (e) {
+                                            setError(e.message);
+                                            setSuccess(false);
+                                        }
                                     }
 
                                     setInProgress(false);
@@ -220,7 +227,7 @@ const App: React.FC = () => {
                                 </ul>
                             </form>
 
-                            {(inProgress || success) && (
+                            {(inProgress || success || error) && (
                                 <Stack tokens={{ childrenGap: 15 }}>
                                     {inProgress && (
                                         <Spinner size={SpinnerSize.medium} />
@@ -230,6 +237,13 @@ const App: React.FC = () => {
                                             messageBarType={MessageBarType.success}
                                         >
                                             Link saved successfully.
+                                        </MessageBar>
+                                    )}
+                                    {error && (
+                                        <MessageBar
+                                            messageBarType={MessageBarType.error}
+                                        >
+                                            {error}
                                         </MessageBar>
                                     )}
                                     {latestTask && (

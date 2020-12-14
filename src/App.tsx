@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
-import * as Msal from 'msal';
+import { AccountInfo, AuthenticationResult, InteractionRequiredAuthError, PublicClientApplication } from '@azure/msal-browser';
 import {
     PrimaryButton, DefaultButton,
     Spinner, SpinnerSize,
@@ -16,11 +16,17 @@ import { initializeIcons } from 'office-ui-fabric-react/lib/Icons';
 
 initializeIcons();
 
-const msal = new Msal.UserAgentApplication({
+// Set the redirect URI to the chromiumapp.com provided by Chromium
+const redirectUri = typeof chrome !== "undefined" && chrome.identity ?
+    chrome.identity.getRedirectURL() : 
+    `${window.location.origin}/index.html`;
+
+const msal = new PublicClientApplication({
     auth: {
         authority: "https://login.microsoftonline.com/common/",
         clientId: "36cb3b59-915a-424e-bc06-f8f557baa72f",
-        redirectUri: `${window.location.origin}/redirect.html`
+        redirectUri,
+        postLogoutRedirectUri: redirectUri
     },
     cache: {
         cacheLocation: "localStorage"
@@ -38,30 +44,8 @@ const DEFAULT_TASKS_FOLDER_NAME = "Links";
 const TASK_FOLDER_SYNC_KEY = "taskFolder";
 const NEW_FOLDER_SUFFIX = " (New)";
 
-declare const chrome: {
-    tabs: {
-        getSelected: (windowId: Number | null, callback: (tab: ChromeTab) => void) => void
-    },
-    identity: {
-        getProfileUserInfo: (callback: (user: ChromeUser) => void) => void
-    },
-    storage: {
-        sync: {
-            get: <T>(key: string, callback: (result: { [key: string]: T }) => void) => void,
-            set: (items: object, callback: () => void) => void
-        }
-    }
-}
-
-type ChromeTab = {
-    title: string,
-    url: string
-}
-
-type ChromeUser = {
-    email: string,
-    id: string
-}
+type ChromeTab = Partial<chrome.tabs.Tab>;
+type ChromeUser = chrome.identity.UserInfo;
 
 type OutlookTask = {
     subject: string,
@@ -89,11 +73,11 @@ type GraphProfile = {
 
 async function getAccessToken(scopes: string[]): Promise<string> {
     try {
-        const { accessToken } = await msal.acquireTokenSilent({ scopes });
+        const { accessToken } = await msal.acquireTokenSilent({ scopes, account: msal.getAllAccounts()[0] });
 
         return accessToken;
     } catch (e) {
-        if (Msal.InteractionRequiredAuthError.isInteractionRequiredError(e.errorCode)) {
+        if (InteractionRequiredAuthError.isInteractionRequiredError(e.errorCode, e.errorMessage)) {
             const { accessToken } = await msal.acquireTokenPopup({ scopes });
 
             return accessToken;
@@ -105,7 +89,7 @@ async function getAccessToken(scopes: string[]): Promise<string> {
 
 async function getCachedAccessToken(scopes: string[]): Promise<string | null> {
     // acquireTokenSilent will throw an error in Chrome extensions if a network request is made.
-    const response = await msal.acquireTokenSilent({ scopes }).catch(() => null);
+    const response = await msal.acquireTokenSilent({ scopes, account: msal.getAllAccounts()[0] }).catch(() => null);
 
     return response && response.accessToken;
 }
@@ -128,15 +112,66 @@ async function getSignedInUser(): Promise<ChromeUser> {
     })
 }
 
-async function login(loginHint?: string): Promise<Msal.AuthResponse> {
-    return msal.loginPopup({
-        scopes: TASKS_SCOPES,
-        loginHint
+async function login(loginHint?: string): Promise<AuthenticationResult | null> {
+    const redirectUri = chrome.identity.getRedirectURL();
+    const loginUrl = await getLoginUrl(redirectUri, loginHint);
+
+    return launchWebAuthFlow(loginUrl);
+}
+
+async function getLoginUrl(redirectUri: string, loginHint?: string): Promise<string> {
+    return new Promise((resolve) => {
+        msal.loginRedirect({
+            redirectUri,
+            scopes: TASKS_SCOPES,
+            loginHint,
+            onRedirectNavigate: (url) => {
+                resolve(url);
+                return false;
+            }
+        })
     });
 }
 
-function logout(): void {
-    msal.logout();
+async function logout(): Promise<void> {
+    const logoutUrl = await getLogoutUrl();
+
+    await launchWebAuthFlow(logoutUrl);
+}
+
+async function getLogoutUrl(): Promise<string> {
+    return new Promise(resolve => {
+        msal.logout({
+            onRedirectNavigate: (url: string) => {
+                resolve(url);
+                return false;
+            }
+        })
+    })
+}
+
+/**
+ * Launch the Chromium web auth UI.
+ * @param {*} url AAD url to navigate to.
+ * @param {*} interactive Whether or not the flow is interactive
+ */
+async function launchWebAuthFlow(url: string): Promise<AuthenticationResult | null> {
+    return new Promise<AuthenticationResult | null>((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow({
+            interactive: true,
+            url
+        }, (responseUrl) => {
+            // Response urls includes a hash (login, acquire token calls)
+            if (responseUrl && responseUrl.includes("#")) {
+                msal.handleRedirectPromise(`#${responseUrl.split("#")[1]}`)
+                    .then(resolve)
+                    .catch(reject)
+            } else {
+                // Logout calls
+                resolve(null);
+            }
+        })
+    })
 }
 
 async function fetchJson<T>(url: string, method: string, headers: object, body?: object): Promise<T> {
@@ -182,13 +217,13 @@ async function getCurrentTab(): Promise<ChromeTab> {
     return new Promise((resolve, reject) => {
         if (chrome && chrome.tabs) {
             // Running in extension popup
-            chrome.tabs.getSelected(null, (tab: ChromeTab) => {
+            chrome.tabs.query({ active: true }, (tab: ChromeTab[]) => {
                 if (tab)  {
-                    resolve(tab);
+                    resolve(tab[0]);
                 } else {
                     reject();
                 }
-            });
+            })
         } else {
             // Running on localhost
             resolve({
@@ -202,7 +237,7 @@ async function getCurrentTab(): Promise<ChromeTab> {
 async function readSyncedValue<T>(key: string, defaultValue: T): Promise<T> {
     return new Promise((resolve, reject) => {
         if (chrome && chrome.storage) {
-            chrome.storage.sync.get<T>(key, (result) => {
+            chrome.storage.sync.get(key, (result) => {
                 resolve(result[key] || defaultValue);
             });
         } else {
@@ -372,7 +407,7 @@ const GraphProfile: React.FC = () => {
 };
 
 const App: React.FC = () => {
-    const [ account, setAccount ] = useState<Msal.Account | null>(msal.getAccount());
+    const [ account, setAccount ] = useState<AccountInfo | null>(msal.getAllAccounts()[0]);
     const [ success, setSuccess ] = useState<boolean>(false);
     const [ inProgress, setInProgress ] = useState<boolean>(false);
     const [ latestTask, setLatestTask ] = useState<string | undefined>('');
@@ -431,7 +466,7 @@ const App: React.FC = () => {
                                         setSavedTaskFolder(newFolderName);
                                         setSyncedFolderName(newFolderName);
 
-                                        const { id } = await addTask(currentTab.title, currentTab.url, newFolderName);
+                                        const { id } = await addTask(currentTab.title || "", currentTab.url || "", newFolderName);
                                         setLatestTask(id);
                                         setSuccess(true);
                                     }
@@ -586,9 +621,9 @@ const App: React.FC = () => {
                             )}
 
                             <DefaultButton
-                                onClick={() => {
-                                    logout();
+                                onClick={async () => {
                                     setAccount(null);
+                                    await logout();
                                 }}
                             >
                                 Logout
@@ -605,7 +640,7 @@ const App: React.FC = () => {
                                     primary={true}
                                     onClick={async () => {
                                         await login(signedInUser.email);
-                                        setAccount(msal.getAccount());
+                                        setAccount(msal.getAllAccounts()[0]);
                                     }}
                                     secondaryText={`(w/ ${signedInUser.email})`}
                                     style={{
@@ -618,7 +653,7 @@ const App: React.FC = () => {
                             <CompoundButton
                                 onClick={async () => {
                                     await login();
-                                    setAccount(msal.getAccount());
+                                    setAccount(msal.getAllAccounts()[0]);
                                 }}
                                 secondaryText="(w/ your Microsoft account)"
                                 style={{

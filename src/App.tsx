@@ -66,10 +66,16 @@ const App: React.FC = () => {
 
     // Load synced folder name
     const [ ,setSyncedFolderName ] = useSyncedValue<string>(TASK_FOLDER_SYNC_KEY, DEFAULT_TASKS_FOLDER_NAME, (folderName => {
+        const taskFolder = { 
+            key: folderName, 
+            text: folderName 
+        };
+        
         setTaskFolders([
-            { key: folderName, text: folderName}
+            taskFolder
         ]);
         setSavedTaskFolder(folderName);
+        setSelectedTaskFolder(taskFolder);
     }));
 
     const comboBoxRef = useRef<IComboBox | null>(null);
@@ -203,6 +209,7 @@ const App: React.FC = () => {
                                         <PrimaryButton
                                             disabled={(
                                                 inProgress ||
+                                                !selectedTaskFolder ||
                                                 !currentTab.title
                                             )}
                                             type="submit"

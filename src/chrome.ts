@@ -35,7 +35,7 @@ export async function getCurrentTab(): Promise<ChromeTab> {
     return new Promise((resolve, reject) => {
         if (chrome && chrome.tabs) {
             // Running in extension popup
-            chrome.tabs.query({ active: true }, (tab: ChromeTab[]) => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tab: ChromeTab[]) => {
                 if (tab)  {
                     resolve(tab[0]);
                 } else {

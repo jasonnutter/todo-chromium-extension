@@ -1,8 +1,8 @@
 {
     "$schema": "http://json.schemastore.org/chrome-manifest",
     "name": "To-Do (Unofficial)",
-    "version": "1.0",
-    "description": "Unofficial Chrome/Edge extension for saving links to your Microsoft To Do list.",
+    "version": "1.0.0",
+    "description": "Unofficial Chromium extension for saving links to your Microsoft To-Do lists.",
     "manifest_version": 2,
     "permissions": [
         "activeTab",

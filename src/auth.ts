@@ -5,10 +5,12 @@ export const redirectUri = typeof chrome !== "undefined" && chrome.identity ?
     chrome.identity.getRedirectURL() : 
     `${window.location.origin}/index.html`;
 
+const clientId = "36cb3b59-915a-424e-bc06-f8f557baa72f";
+
 const msal = new PublicClientApplication({
     auth: {
         authority: "https://login.microsoftonline.com/common/",
-        clientId: "36cb3b59-915a-424e-bc06-f8f557baa72f",
+        clientId,
         redirectUri,
         postLogoutRedirectUri: redirectUri
     },
@@ -38,15 +40,8 @@ export async function getAccessToken(scopes: string[]): Promise<string> {
     }
 }
 
-export async function getCachedAccessToken(scopes: string[]): Promise<string | null> {
-    // acquireTokenSilent will throw an error in Chrome extensions if a network request is made.
-    const response = await msal.acquireTokenSilent({ scopes, account: msal.getAllAccounts()[0] }).catch(() => null);
-
-    return response && response.accessToken;
-}
-
 export async function getLoginUrl(loginHint?: string): Promise<string> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         msal.loginRedirect({
             redirectUri,
             scopes: TASKS_SCOPES,
@@ -55,18 +50,18 @@ export async function getLoginUrl(loginHint?: string): Promise<string> {
                 resolve(url);
                 return false;
             }
-        })
+        }).catch(reject);
     });
 }
 
 export async function getLogoutUrl(): Promise<string> {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
         msal.logout({
             onRedirectNavigate: (url: string) => {
                 resolve(url);
                 return false;
             }
-        })
+        }).catch(reject);
     })
 }
 
@@ -87,7 +82,8 @@ export async function launchWebAuthFlow(url: string): Promise<AuthenticationResu
                     .then(resolve)
                     .catch(reject)
             } else {
-                // Logout calls
+                // Logout calls and windows that are closed early
+                localStorage.removeItem(`msal.${clientId}.interaction.status`);
                 resolve(null);
             }
         })

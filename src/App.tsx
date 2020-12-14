@@ -269,7 +269,12 @@ const App: React.FC = () => {
                             <DefaultButton
                                 onClick={async () => {
                                     setAccount(null);
-                                    await logout();
+                                    try {
+                                        await logout();
+                                        setError("");
+                                    } catch (e) {
+                                        setError(e.message);
+                                    }
                                 }}
                             >
                                 Logout
@@ -285,8 +290,13 @@ const App: React.FC = () => {
                                 <CompoundButton
                                     primary={true}
                                     onClick={async () => {
-                                        await login(signedInUser.email);
-                                        setAccount(getActiveAccount());
+                                        try {
+                                            await login(signedInUser.email);
+                                            setAccount(getActiveAccount());
+                                            setError("");
+                                        } catch (e) {
+                                            setError(e.message);
+                                        }
                                     }}
                                     secondaryText={`(w/ ${signedInUser.email})`}
                                     style={{
@@ -298,8 +308,13 @@ const App: React.FC = () => {
                             )}
                             <CompoundButton
                                 onClick={async () => {
-                                    await login();
-                                    setAccount(getActiveAccount());
+                                    try {
+                                        await login();
+                                        setAccount(getActiveAccount());
+                                        setError("");
+                                    } catch (e) {
+                                        setError(e.message);
+                                    }
                                 }}
                                 secondaryText="(w/ your Microsoft account)"
                                 style={{
@@ -309,6 +324,15 @@ const App: React.FC = () => {
                                 Login
                             </CompoundButton>
                         </Stack>
+                        {error && (
+                            <div style={{ marginTop: '15px' }}>
+                                <MessageBar
+                                    messageBarType={MessageBarType.error}
+                                >
+                                    {error}
+                                </MessageBar>
+                            </div>
+                         )}
                     </PivotItem>
                 </Pivot>
             )}

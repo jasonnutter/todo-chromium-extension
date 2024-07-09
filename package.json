@@ -10,7 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@azure/msal-browser": "^2.8.0",
+    "@azure/msal-browser": "^3.18.0",
+    "@azure/msal-react": "^2.0.20",
     "@fluentui/react": "^8.118.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

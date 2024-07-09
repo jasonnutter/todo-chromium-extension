@@ -13,7 +13,7 @@ export const redirectUri =
 
 const clientId = "36cb3b59-915a-424e-bc06-f8f557baa72f";
 
-const msal = new PublicClientApplication({
+export const msal = new PublicClientApplication({
   auth: {
     authority: "https://login.microsoftonline.com/common/",
     clientId,
@@ -71,7 +71,7 @@ export async function getLoginUrl(
 export async function getLogoutUrl(): Promise<string> {
   return new Promise((resolve, reject) => {
     msal
-      .logout({
+      .logoutRedirect({
         onRedirectNavigate: (url: string) => {
           resolve(url);
           return false;

@@ -1,0 +1,23 @@
+{
+  "name": "To-Do (Unofficial)",
+  "version": "1.0.0",
+  "description": "Unofficial Chromium extension for saving links to your Microsoft To-Do lists.",
+  "manifest_version": 3,
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "identity",
+    "identity.email"
+  ],
+  "action": {
+    "default_popup": "index.html"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png",
+    "256": "icon.png"
+  },
+  "incognito": "not_allowed"
+}

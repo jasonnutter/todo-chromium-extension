@@ -136,7 +136,7 @@ const App: React.FC = () => {
                       setSuccess(true);
                       setError("");
                     } catch (e) {
-                      setError(e.message);
+                      setError((e as Error).message);
                       setSuccess(false);
                     }
                   }
@@ -183,7 +183,7 @@ const App: React.FC = () => {
                           : taskFolders[0].key
                       }
                       label="Task Folder"
-                      onPendingValueChanged={async (option, index, value) => {
+                      onPendingValueChanged={async (_option, _index, value) => {
                         if (value) {
                           const folders = await getTaskFolders(value);
                           const folderExists = folders.value.find(
@@ -218,7 +218,7 @@ const App: React.FC = () => {
                           setSelectedTaskFolder(null);
                         }
                       }}
-                      onItemClick={(e, option, index) => {
+                      onItemClick={(_e, option, index) => {
                         if (option && option.text) {
                           setSelectedTaskFolder(option);
                           setSelectedTaskFolderIndex(index || 0);
@@ -240,7 +240,7 @@ const App: React.FC = () => {
                           setSelectedTaskFolderIndex(folderIndex);
                         }
                       }}
-                      onBlur={(e) => {
+                      onBlur={(_e) => {
                         if (taskFolders.length) {
                           setSelectedTaskFolder(
                             taskFolders[selectedTaskFolderIndex]
@@ -305,7 +305,7 @@ const App: React.FC = () => {
                     await logout();
                     setError("");
                   } catch (e) {
-                    setError(e.message);
+                    setError((e as Error).message);
                   }
                 }}
               >
@@ -323,11 +323,11 @@ const App: React.FC = () => {
                   primary={true}
                   onClick={async () => {
                     try {
-                      await login(signedInUser.email);
+                      await login({ loginHint: signedInUser.email });
                       setAccount(getActiveAccount());
                       setError("");
                     } catch (e) {
-                      setError(e.message);
+                      setError((e as Error).message);
                     }
                   }}
                   secondaryText={`(w/ ${signedInUser.email})`}
@@ -341,11 +341,11 @@ const App: React.FC = () => {
               <CompoundButton
                 onClick={async () => {
                   try {
-                    await login();
+                    await login({ prompt: "select_account" });
                     setAccount(getActiveAccount());
                     setError("");
                   } catch (e) {
-                    setError(e.message);
+                    setError((e as Error).message);
                   }
                 }}
                 secondaryText="(w/ your Microsoft account)"
